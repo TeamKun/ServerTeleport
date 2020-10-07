@@ -22,7 +22,6 @@ import java.util.stream.Stream;
 public class ServerTeleportCommand implements Command {
     private final ProxyServer server;
 
-    private final String servername;
     private final String langPrefix;
     private final String langUsage;
     private final String langNoServer;
@@ -33,9 +32,6 @@ public class ServerTeleportCommand implements Command {
 
     public ServerTeleportCommand(ProxyServer server, Toml toml) {
         this.server = server;
-
-        // Config
-        this.servername = toml.getString("lobby-server");
 
         // Localization
         Toml lang = toml.getTable("lang");
@@ -61,7 +57,7 @@ public class ServerTeleportCommand implements Command {
         }
 
         // Argument Validation
-        if (args.length < 1 || args[0] == null) {
+        if (args.length < 2) {
             player.sendMessage(ComponentBuilders.text()
                     .content(langPrefix)
                     .append(langUsage)
@@ -70,7 +66,7 @@ public class ServerTeleportCommand implements Command {
             return;
         }
         String srcArg = args[0];
-        String dstArg = args.length < 2 ? "#" + servername : args[1];
+        String dstArg = args[1];
 
         // Destination Validation
         Optional<RegisteredServer> dstOptional = dstArg.startsWith("#")
@@ -121,6 +117,14 @@ public class ServerTeleportCommand implements Command {
                 p.createConnectionRequest(dst).fireAndForget());
     }
 
+    private List<String> candidate(String arg, List<String> candidates) {
+        if (arg.isEmpty())
+            return candidates;
+        if (candidates.contains(arg))
+            return Arrays.asList(arg);
+        return candidates.stream().filter(e -> e.startsWith(arg)).collect(Collectors.toList());
+    }
+
     @Override
     public List<String> suggest(CommandSource player, @NonNull String[] args) {
         // Permission Validation
@@ -129,24 +133,28 @@ public class ServerTeleportCommand implements Command {
 
         // Source Suggestion
         if (args.length == 1)
-            return Stream.of(
-                    Stream.of("@a"),
-                    this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
-                            .map(ServerInfo::getName).map(e -> "#" + e),
-                    this.server.getAllPlayers().stream().map(Player::getUsername)
-            )
-                    .flatMap(Function.identity())
-                    .collect(Collectors.toList());
+            return candidate(args[0],
+                    Stream.of(
+                            Stream.of("@a"),
+                            this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
+                                    .map(ServerInfo::getName).map(e -> "#" + e),
+                            this.server.getAllPlayers().stream().map(Player::getUsername)
+                    )
+                            .flatMap(Function.identity())
+                            .collect(Collectors.toList())
+            );
 
         // Destination Suggestion
         if (args.length == 2)
-            return Stream.of(
-                    this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
-                            .map(ServerInfo::getName).map(e -> "#" + e),
-                    this.server.getAllPlayers().stream().map(Player::getUsername)
-            )
-                    .flatMap(Function.identity())
-                    .collect(Collectors.toList());
+            return candidate(args[1],
+                    Stream.of(
+                            this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
+                                    .map(ServerInfo::getName).map(e -> "#" + e),
+                            this.server.getAllPlayers().stream().map(Player::getUsername)
+                    )
+                            .flatMap(Function.identity())
+                            .collect(Collectors.toList())
+            );
 
         return Collections.emptyList();
     }

@@ -2,7 +2,7 @@ lobby-server = "hub"
 
 [lang]
 prefix = "§d[ServerTP] "
-usage = "§a/stp <player> <server>"
+usage = "§a/stp <from:player|#server|@a> <to:player|#server>"
 noserver = "§aNo server to teleport"
 nopermission = "§cNo permission"
 player-num = "§a%d players"
