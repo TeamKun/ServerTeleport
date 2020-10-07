@@ -22,8 +22,6 @@ import java.nio.file.Path;
         authors = {"Kamesuta"}
 )
 public class ServerTeleport {
-    public static String servername;
-
     private final ProxyServer server;
     private final Logger logger;
 
@@ -79,8 +77,7 @@ public class ServerTeleport {
         if (toml == null) {
             logger.warn("Failed to load config.toml. Shutting down.");
         } else {
-            servername = toml.getString("lobby-server");
-            commandManager.register(new ServerTeleportCommand(server), "stp", "servertp");
+            commandManager.register(new ServerTeleportCommand(server, toml), "stp", "servertp");
             logger.info("Plugin has enabled!");
         }
     }

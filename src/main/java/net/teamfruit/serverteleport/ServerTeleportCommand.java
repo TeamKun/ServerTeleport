@@ -1,5 +1,6 @@
 package net.teamfruit.serverteleport;
 
+import com.moandjiezana.toml.Toml;
 import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
@@ -7,7 +8,6 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.text.ComponentBuilders;
-import net.kyori.text.format.TextColor;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.*;
@@ -18,8 +18,26 @@ import java.util.stream.Stream;
 public class ServerTeleportCommand implements Command {
     private final ProxyServer server;
 
-    public ServerTeleportCommand(ProxyServer server) {
+    private final String servername;
+    private final String langPrefix;
+    private final String langUsage;
+    private final String langNoServer;
+    private final String langPlayerNum;
+    private final String langPlayerName;
+    private final String langSuccess;
+
+    public ServerTeleportCommand(ProxyServer server, Toml toml) {
         this.server = server;
+
+        this.servername = toml.getString("lobby-server");
+
+        Toml lang = toml.getTable("lang");
+        this.langPrefix = lang.getString("prefix");
+        this.langUsage = lang.getString("usage");
+        this.langNoServer = lang.getString("noserver");
+        this.langPlayerNum = lang.getString("player-num");
+        this.langPlayerName = lang.getString("player-name");
+        this.langSuccess = lang.getString("success");
     }
 
     @Override
@@ -27,16 +45,14 @@ public class ServerTeleportCommand implements Command {
         Player player = (Player) source;
         if (args.length < 1 || args[0] == null) {
             player.sendMessage(ComponentBuilders.text()
-                    .content("[かめすたプラグイン] ")
-                    .color(TextColor.LIGHT_PURPLE)
-                    .append("/stp <誰> <鯖>")
-                    .color(TextColor.GREEN)
+                    .content(langPrefix)
+                    .append(langUsage)
                     .build()
             );
             return;
         }
         String target = args[0];
-        String server = args.length < 2 ? ServerTeleport.servername : args[1];
+        String server = args.length < 2 ? servername : args[1];
 
         Collection<Player> players = Optional.ofNullable(target.startsWith("#") ? target.substring(1) : null)
                 .flatMap(this.server::getServer)
@@ -50,23 +66,24 @@ public class ServerTeleportCommand implements Command {
         if (!toConnect.isPresent()) {
             player.sendMessage(ComponentBuilders.text()
                     .append(ComponentBuilders.text()
-                            .color(TextColor.LIGHT_PURPLE)
-                            .content("[かめすたプラグイン] "))
+                            .content(langPrefix))
                     .append(ComponentBuilders.text()
-                            .color(TextColor.RED)
-                            .append("転送先鯖が見つかりません"))
+                            .append(langNoServer))
                     .build()
             );
         } else {
             player.sendMessage(ComponentBuilders.text()
                     .append(ComponentBuilders.text()
-                            .color(TextColor.LIGHT_PURPLE)
-                            .content("[かめすたプラグイン] "))
+                            .content(langPrefix))
                     .append(ComponentBuilders.text()
-                            .color(TextColor.GREEN)
-                            .append((players.size() == 1
-                                    ? players.stream().findFirst().get().getUsername() + " "
-                                    : players.size() + "人のプレイヤー") + "を " + server + " に転送します"))
+                            .append(
+                                    String.format(langSuccess,
+                                            server,
+                                            players.size() == 1
+                                                    ? String.format(langPlayerName, players.stream().findFirst().get().getUsername())
+                                                    : String.format(langPlayerNum, players.size())
+                                    )
+                            ))
                     .build()
             );
             players.forEach(p ->

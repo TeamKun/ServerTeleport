@@ -1,1 +1,9 @@
 lobby-server = "hub"
+
+[[lang]]
+prefix = "§d[ServerTP] "
+usage = "§a/stp <player> <server>"
+noserver = "§aNo server to teleport"
+player-num = "§a%d players"
+player-name = "§a%s"
+success = "§aTeleporting %s to %s..."
