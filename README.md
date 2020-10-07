@@ -1,6 +1,6 @@
 # ServerTeleport
 
-You can send players to another server.  
+You can move other players between servers.
 
 ## Usage
 
@@ -11,7 +11,7 @@ Send Kamesuta to 'pvp' server
 `/stp Kamesuta #pvp`  
 
 Send all players in network to the server which Notch is playing  
-`/stp @a minigame`  
+`/stp @a Notch`  
 
 Send all players in 'resource' server to 'survival' server  
 `/stp #resource #survival`  
