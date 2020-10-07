@@ -5,12 +5,16 @@ import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.text.ComponentBuilders;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -22,6 +26,7 @@ public class ServerTeleportCommand implements Command {
     private final String langPrefix;
     private final String langUsage;
     private final String langNoServer;
+    private final String langNoPermission;
     private final String langPlayerNum;
     private final String langPlayerName;
     private final String langSuccess;
@@ -29,20 +34,33 @@ public class ServerTeleportCommand implements Command {
     public ServerTeleportCommand(ProxyServer server, Toml toml) {
         this.server = server;
 
+        // Config
         this.servername = toml.getString("lobby-server");
 
+        // Localization
         Toml lang = toml.getTable("lang");
         this.langPrefix = lang.getString("prefix");
         this.langUsage = lang.getString("usage");
         this.langNoServer = lang.getString("noserver");
+        this.langNoPermission = lang.getString("nopermission");
         this.langPlayerNum = lang.getString("player-num");
         this.langPlayerName = lang.getString("player-name");
         this.langSuccess = lang.getString("success");
     }
 
     @Override
-    public void execute(@NonNull CommandSource source, String[] args) {
-        Player player = (Player) source;
+    public void execute(@NonNull CommandSource player, String[] args) {
+        // Permission Validation
+        if (!player.hasPermission("servertp")) {
+            player.sendMessage(ComponentBuilders.text()
+                    .content(langPrefix)
+                    .append(langNoPermission)
+                    .build()
+            );
+            return;
+        }
+
+        // Argument Validation
         if (args.length < 1 || args[0] == null) {
             player.sendMessage(ComponentBuilders.text()
                     .content(langPrefix)
@@ -51,19 +69,14 @@ public class ServerTeleportCommand implements Command {
             );
             return;
         }
-        String target = args[0];
-        String server = args.length < 2 ? servername : args[1];
+        String srcArg = args[0];
+        String dstArg = args.length < 2 ? "#" + servername : args[1];
 
-        Collection<Player> players = Optional.ofNullable(target.startsWith("#") ? target.substring(1) : null)
-                .flatMap(this.server::getServer)
-                .map(RegisteredServer::getPlayersConnected)
-                .orElse("@a".equals(target)
-                        ? this.server.getAllPlayers()
-                        : this.server.getPlayer(target).map(Arrays::asList).orElse(Collections.emptyList())
-                );
-
-        Optional<RegisteredServer> toConnect = this.server.getServer(server);
-        if (!toConnect.isPresent()) {
+        // Destination Validation
+        Optional<RegisteredServer> dstOptional = dstArg.startsWith("#")
+                ? this.server.getServer(dstArg.substring(1))
+                : this.server.getPlayer(dstArg).flatMap(Player::getCurrentServer).map(ServerConnection::getServer);
+        if (!dstOptional.isPresent()) {
             player.sendMessage(ComponentBuilders.text()
                     .append(ComponentBuilders.text()
                             .content(langPrefix))
@@ -71,43 +84,70 @@ public class ServerTeleportCommand implements Command {
                             .append(langNoServer))
                     .build()
             );
-        } else {
-            player.sendMessage(ComponentBuilders.text()
-                    .append(ComponentBuilders.text()
-                            .content(langPrefix))
-                    .append(ComponentBuilders.text()
-                            .append(
-                                    String.format(langSuccess,
-                                            server,
-                                            players.size() == 1
-                                                    ? String.format(langPlayerName, players.stream().findFirst().get().getUsername())
-                                                    : String.format(langPlayerNum, players.size())
-                                    )
-                            ))
-                    .build()
-            );
-            players.forEach(p ->
-                    p.createConnectionRequest(toConnect.get()).fireAndForget());
+            return;
         }
+        RegisteredServer dst = dstOptional.get();
+
+        // Source Validation
+        List<Player> src = (
+                srcArg.startsWith("#")
+                        ? this.server.getServer(srcArg.substring(1)).map(RegisteredServer::getPlayersConnected).orElseGet(Collections::emptyList)
+                        : "@a".equals(srcArg)
+                        ? this.server.getAllPlayers()
+                        : this.server.getPlayer(srcArg).map(Arrays::asList).orElseGet(Collections::emptyList)
+        )
+                .stream()
+                .filter(p -> !dstOptional.equals(p.getCurrentServer().map(ServerConnection::getServer)))
+                .collect(Collectors.toList());
+
+        // Send Message
+        player.sendMessage(ComponentBuilders.text()
+                .append(ComponentBuilders.text()
+                        .content(langPrefix))
+                .append(ComponentBuilders.text()
+                        .append(
+                                String.format(langSuccess,
+                                        dstArg,
+                                        src.size() == 1
+                                                ? String.format(langPlayerName, src.get(0).getUsername())
+                                                : String.format(langPlayerNum, src.size())
+                                )
+                        ))
+                .build()
+        );
+
+        // Run Redirect
+        src.forEach(p ->
+                p.createConnectionRequest(dst).fireAndForget());
     }
 
     @Override
-    public List<String> suggest(CommandSource source, @NonNull String[] args) {
+    public List<String> suggest(CommandSource player, @NonNull String[] args) {
+        // Permission Validation
+        if (!player.hasPermission("servertp"))
+            return Collections.emptyList();
+
+        // Source Suggestion
         if (args.length == 1)
-            return Arrays.asList(
+            return Stream.of(
                     Stream.of("@a"),
                     this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
                             .map(ServerInfo::getName).map(e -> "#" + e),
                     this.server.getAllPlayers().stream().map(Player::getUsername)
             )
-                    .stream()
                     .flatMap(Function.identity())
                     .collect(Collectors.toList());
+
+        // Destination Suggestion
         if (args.length == 2)
-            return this.server.getAllServers()
-                    .stream()
-                    .map(e -> e.getServerInfo().getName())
+            return Stream.of(
+                    this.server.getAllServers().stream().map(RegisteredServer::getServerInfo)
+                            .map(ServerInfo::getName).map(e -> "#" + e),
+                    this.server.getAllPlayers().stream().map(Player::getUsername)
+            )
+                    .flatMap(Function.identity())
                     .collect(Collectors.toList());
+
         return Collections.emptyList();
     }
 }
