@@ -1,6 +1,7 @@
 package net.teamfruit.serverteleport;
 
 import com.moandjiezana.toml.Toml;
+import com.mojang.brigadier.context.CommandContext;
 import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
@@ -8,7 +9,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
-import net.kyori.text.ComponentBuilders;
+import net.kyori.adventure.text.Component;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Arrays;
@@ -44,26 +45,26 @@ public class ServerTeleportCommand implements Command {
         this.langSuccess = lang.getString("success");
     }
 
-    @Override
-    public void execute(@NonNull CommandSource player, String[] args) {
+    public int execute(CommandContext<CommandSource> ctx) {
+        String[] args = ctx.getArgument("message", String.class).split(" ");
         // Permission Validation
-        if (!player.hasPermission("servertp")) {
-            player.sendMessage(ComponentBuilders.text()
+        if (!ctx.getSource().hasPermission("servertp")) {
+            ctx.getSource().sendMessage(Component.text()
                     .content(langPrefix)
-                    .append(langNoPermission)
+                    .append(Component.text(langNoPermission))
                     .build()
             );
-            return;
+            return 1;
         }
 
         // Argument Validation
         if (args.length < 2) {
-            player.sendMessage(ComponentBuilders.text()
+            ctx.getSource().sendMessage(Component.text()
                     .content(langPrefix)
-                    .append(langUsage)
+                    .append(Component.text(langUsage))
                     .build()
             );
-            return;
+            return 1;
         }
         String srcArg = args[0];
         String dstArg = args[1];
@@ -73,14 +74,12 @@ public class ServerTeleportCommand implements Command {
                 ? this.server.getServer(dstArg.substring(1))
                 : this.server.getPlayer(dstArg).flatMap(Player::getCurrentServer).map(ServerConnection::getServer);
         if (!dstOptional.isPresent()) {
-            player.sendMessage(ComponentBuilders.text()
-                    .append(ComponentBuilders.text()
-                            .content(langPrefix))
-                    .append(ComponentBuilders.text()
-                            .append(langNoServer))
+            ctx.getSource().sendMessage(Component.text()
+                    .append(Component.text().content(langPrefix))
+                    .append(Component.text(langNoServer))
                     .build()
             );
-            return;
+            return 1;
         }
         RegisteredServer dst = dstOptional.get();
 
@@ -97,24 +96,23 @@ public class ServerTeleportCommand implements Command {
                 .collect(Collectors.toList());
 
         // Send Message
-        player.sendMessage(ComponentBuilders.text()
-                .append(ComponentBuilders.text()
+        ctx.getSource().sendMessage(Component.text()
+                .append(Component.text()
                         .content(langPrefix))
-                .append(ComponentBuilders.text()
-                        .append(
-                                String.format(langSuccess,
-                                        dstArg,
-                                        src.size() == 1
-                                                ? String.format(langPlayerName, src.get(0).getUsername())
-                                                : String.format(langPlayerNum, src.size())
-                                )
+                .append(Component.text(String.format(langSuccess,
+                                dstArg,
+                                src.size() == 1
+                                        ? String.format(langPlayerName, src.get(0).getUsername())
+                                        : String.format(langPlayerNum, src.size())
                         ))
+                )
                 .build()
         );
 
         // Run Redirect
         src.forEach(p ->
                 p.createConnectionRequest(dst).fireAndForget());
+        return 1;
     }
 
     private List<String> candidate(String arg, List<String> candidates) {
@@ -125,7 +123,6 @@ public class ServerTeleportCommand implements Command {
         return candidates.stream().filter(e -> e.startsWith(arg)).collect(Collectors.toList());
     }
 
-    @Override
     public List<String> suggest(CommandSource player, @NonNull String[] args) {
         // Permission Validation
         if (!player.hasPermission("servertp"))

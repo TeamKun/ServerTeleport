@@ -2,7 +2,13 @@ package net.teamfruit.serverteleport;
 
 import com.google.inject.Inject;
 import com.moandjiezana.toml.Toml;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -23,6 +29,7 @@ import java.nio.file.Path;
 public class ServerTeleport {
     private final ProxyServer server;
     private final Logger logger;
+    private ServerTeleportCommand command;
 
     private Toml loadConfig(Path path) {
         File folder = path.toFile();
@@ -76,7 +83,21 @@ public class ServerTeleport {
         if (toml == null) {
             logger.warn("Failed to load config.toml. Shutting down.");
         } else {
-            commandManager.register(new ServerTeleportCommand(server, toml), "stp", "servertp");
+            this.command = new ServerTeleportCommand(server, toml);
+            CommandManager manager = server.getCommandManager();
+            LiteralCommandNode<CommandSource> shout = LiteralArgumentBuilder.<CommandSource>literal("servertp")
+                    .requires(ctx -> ctx.hasPermission("servertp"))
+                    .then(RequiredArgumentBuilder.<CommandSource, String>argument("message", StringArgumentType.greedyString())
+                            .executes(command::execute)
+                            .build())
+                    .build();
+
+
+            manager.register(
+                    manager.metaBuilder("servertp").aliases("stp").build(),
+                    new BrigadierCommand(shout)
+            );
+
             logger.info("Plugin has enabled!");
         }
     }
